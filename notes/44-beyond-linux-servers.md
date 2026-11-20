@@ -316,7 +316,7 @@ ansible-playbook playbooks/k8s.yml          # changed=0: the API objects already
 kubectl -n shop get deploy,svc,pods
 ```
 
-- `k8s` is idempotent: it compares the desired object with the live one (server-side apply logic) and only patches differences.
+- `k8s` is idempotent: by default it GETs the live object, diffs it with the desired one and sends a **patch** (`merge_type`, strategic-merge by default) only for the differences. Real **server-side apply** happens only when you set `apply: true` with `server_side_apply: { field_manager: ansible }`, which is the better choice when other controllers also manage fields of the same object.
 - Change `k8s_app_replicas: 3`, re-run: one `changed` and a third pod.
 
 ### Lab 2: a container with community.docker

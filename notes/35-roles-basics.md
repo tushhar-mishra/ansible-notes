@@ -258,7 +258,7 @@ _nginx_web_user:
   Debian: www-data
 ```
 
-- Leading underscore: a common convention for "internal, don't set this".
+- Leading underscore: a common convention for "internal, don't set this". Topic 36 tightens it to a **double** underscore plus the role name (`__nginx_web_root`), which is what ansible-lint's `var-naming` rule and most style guides expect; use that form in real roles.
 
 `roles/nginx_web/tasks/main.yml`:
 

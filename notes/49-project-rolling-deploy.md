@@ -258,14 +258,22 @@ server {
     file_type: directory
   register: __shop_releases
 
-- name: Remove all but the newest {{ shop_app_keep_releases }} (never the current one)
+- name: Find what is ACTUALLY live (it may differ from shop_app_version after a manual rollback)
+  ansible.builtin.stat:
+    path: "{{ shop_app_root }}/current"
+  register: __shop_current
+
+- name: Remove all but the newest {{ shop_app_keep_releases }} (never the live one, never the one just deployed)
   ansible.builtin.file:
-    path: "{{ item.path }}"
+    path: "{{ item }}"
     state: absent
-  loop: "{{ (__shop_releases.files | sort(attribute='mtime', reverse=true))[shop_app_keep_releases:] }}"
+  # Sort by version, not mtime: a re-extracted or touched old release would look "new" by mtime.
+  loop: "{{ (__shop_releases.files | map(attribute='path') | community.general.version_sort | reverse | list)[shop_app_keep_releases:] }}"
   loop_control:
-    label: "{{ item.path | basename }}"
-  when: item.path | basename != shop_app_version
+    label: "{{ item | basename }}"
+  when:
+    - item | basename != shop_app_version
+    - item != (__shop_current.stat.lnk_source | default(''))
 ```
 
 ### 3. Point the load balancer at port 8080
@@ -638,7 +646,7 @@ ansible-playbook -i inventories/lab playbooks/ops/rollback.yml -e rollback_to=1.
 | Pipeline green after a rollback | `rescue` cleared the failure | `fail` at the end of `rescue` |
 | `unarchive` re-extracts every time | No `creates` | `creates: .../VERSION` |
 | Host stays out of the LB forever | Both new and old versions unhealthy | Expected safety; alert and investigate; the probe/LB keeps serving with the others |
-| Pruning removed the live release | Sorting by name/mtime without excluding current | Exclude `current`'s target (as in `prune.yml`) |
+| Pruning removed the live release | Sorting by name/mtime, or protecting only `shop_app_version` (after a manual rollback, `current` points elsewhere) | Exclude the **resolved target of `current`** (`stat` → `lnk_source`, as in `prune.yml`) and sort by version |
 | On real RHEL: 403 from nginx | SELinux context on `/opt/shop` | `setype: httpd_sys_content_t` on the release dirs or serve from `/usr/share/nginx` |
 
 ---

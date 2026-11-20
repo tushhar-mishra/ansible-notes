@@ -147,7 +147,7 @@ Paste the output into any YAML vars file. Good for one or two secrets in an othe
 | Tool | Effect |
 |---|---|
 | `no_log: true` (task/play) | The task's arguments and result are replaced by `"the output has been hidden due to the fact that 'no_log: true' was specified for this result"` in output and logs |
-| ansible-core **2.22 secret masking** | Decrypted vault values, `no_log` option values and prompted passwords are registered as **secrets** and replaced with **`$REDACTED$`** anywhere they appear (output, `log_path`, callbacks), even in `debug` |
+| ansible-core **2.22 secret masking** | Decrypted vault values, `no_log` option values and prompted passwords are registered as **secrets** and replaced with **`$REDACTED$`** anywhere they appear (output, `log_path`, callbacks), even in `debug`. ⚠️ *The 2.22 changelog confirms that redaction now works on values "registered as secrets"; the exact `$REDACTED$` text and which values are auto-registered were not verified against the final 2.22 porting guide. Check it, and run the lab below to see it on your version, before quoting details in an interview.* |
 | `diff: false` | No diff output for that task (diffs show file contents) |
 | `loop_control: label` | Don't print whole items (which may contain secrets) |
 

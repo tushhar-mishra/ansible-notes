@@ -58,7 +58,7 @@
 | Task fails on host H | H gets `fatal: ... FAILED!`, is **removed from the rest of the play** (and later plays), others continue |
 | Host unreachable | Same, reported as `UNREACHABLE!` |
 | All hosts failed | `NO MORE HOSTS LEFT`, play ends |
-| End of run | Exit code `2` (some failed) or `3` (some unreachable) |
+| End of run | Exit code `2` (some failed) or, usually, `4` (some unreachable; older docs say `3`, see topic 12) |
 | Pending handlers on H | **Not** run (topic 30) |
 
 ### The tools

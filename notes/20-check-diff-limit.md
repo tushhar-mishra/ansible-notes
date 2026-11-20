@@ -305,7 +305,7 @@ Step 6 is the idempotency proof: if a second run still changes things, something
 ## Where you'll use it
 
 - **Every production change**: `--check --diff` output pasted into the change request; reviewers approve the *plan*.
-- **CI on pull requests** (topic 53): a check-mode run against staging (or prod, read-only credentials permitting) posts the diff as a PR comment.
+- **CI on pull requests** (topic 53): a check-mode run against staging posts the diff as a PR comment. ⚠️ Check mode is **not** read-only from a security point of view: it connects with the same SSH/become access and really runs `check_mode: false` tasks. Never give PR-triggered check runs prod credentials.
 - **Drift detection**: a scheduled `--check --diff` run shows what has drifted since the last apply, without fixing it (topic 55).
 - **Canaries**: `--limit` to one host or one group before the rest.
 - **Incident recovery**: `--start-at-task` and `--limit @file` to finish a run that failed halfway.

@@ -128,16 +128,22 @@ Do this once, outside the pipeline (a small separate Terraform config, or the co
     "Principal": { "Federated": "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" },
     "Action": "sts:AssumeRoleWithWebIdentity",
     "Condition": {
-      "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
-      "StringLike":   { "token.actions.githubusercontent.com:sub": "repo:YOUR_USER/infra-aws:*" }
+      "StringEquals": {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub": "repo:YOUR_USER/infra-aws:environment:demo"
+      }
     }
   }]
 }
 ```
 
-   For a lab, attach permissions covering EC2, IAM (role/instance profile for this project), S3 (state + transfer bucket) and SSM. In production, write a least-privilege policy scoped by resource names/tags, and narrow `sub` to `repo:...:environment:demo`.
+   For a lab, attach permissions covering EC2, IAM (role/instance profile for this project), S3 (state + transfer bucket) and SSM. In production, write a least-privilege policy scoped by resource names/tags.
 
-4. GitHub repo settings: environment **`demo`**, variables `AWS_ROLE_ARN`, `AWS_REGION` (e.g. `eu-west-1`), `TF_STATE_BUCKET`.
+   ⚠️ **Corrected:** an earlier version trusted `repo:YOUR_USER/infra-aws:*` and used this one deploy role for PR plans too. That let **any branch or PR job** assume a role that can create IAM roles and EC2 instances. Use **two roles**:
+   - **deploy role** (above): trust only `…:environment:demo`, and protect the `demo` environment so only `main` can deploy to it;
+   - **plan role** (`AWS_PLAN_ROLE_ARN`): trust `repo:YOUR_USER/infra-aws:pull_request`, with `ReadOnlyAccess` plus read access to the state object and write access only to the `*.tflock` lock file (Terraform notes topic 57). A PR plan runs code from the PR, so it must not hold write credentials.
+
+4. GitHub repo settings: environment **`demo`** (deployment branches: `main` only) with variable `AWS_ROLE_ARN`; repository variables `AWS_PLAN_ROLE_ARN`, `AWS_REGION` (e.g. `eu-west-1`), `TF_STATE_BUCKET`.
 
 ### 1. Terraform
 
@@ -389,12 +395,12 @@ jobs:
   plan:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    environment: demo
+    # no `environment:` here: the OIDC sub is then repo:…:pull_request, which only the plan role trusts
     steps:
       - uses: actions/checkout@v5
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}   # read-only role, never the deploy role
           aws-region: ${{ vars.AWS_REGION }}
       - uses: hashicorp/setup-terraform@v3
       - name: Terraform plan

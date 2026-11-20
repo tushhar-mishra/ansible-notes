@@ -92,7 +92,7 @@ ansible-core 2.22 automatically masks **vault** values, **`no_log`** module opti
 | Tool | Use |
 |---|---|
 | `no_log: true` on every task that uses the secret | Hides arguments and results |
-| `"{{ lookup(...) \| register_secret }}"` (2.22+) | Marks the value as a secret so it's masked as `$REDACTED$` everywhere |
+| `"{{ lookup(...) \| register_secret }}"` (2.22+) | Marks the value as a secret so it's masked as `$REDACTED$` everywhere. ⚠️ *Filter name not verified against the official 2.22 porting guide; confirm it (`ansible-doc -t filter -l \| grep -i secret`) before relying on it. `no_log: true` works on every version.* |
 | Don't `debug` secrets; don't run CI at `-vvv` | Verbose output shows module arguments |
 | `diff: false` on templates containing secrets | Diffs show file contents |
 
