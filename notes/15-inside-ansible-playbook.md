@@ -29,7 +29,7 @@ read ansible.cfg → load inventory → parse playbook (syntax errors stop here)
             run the module on the host → JSON → ok / changed / failed / unreachable
             failed/unreachable host → removed from the rest of this play
         run notified handlers
-   └─ PLAY RECAP → exit code (0 ok, 2 failed, 3 unreachable, 4 parse error)
+   └─ PLAY RECAP → exit code (0 ok, 2 failed, 4 unreachable in practice [docs: 3], 4 parse error)
 ```
 
 **Try it now:**
@@ -54,7 +54,7 @@ The run has two big phases:
 | Phase | Where | What can go wrong |
 |---|---|---|
 | **1. Load and parse** | Control node only, no SSH | Bad config, bad inventory, YAML syntax errors, unknown keywords, missing roles/files for static imports, unknown modules → **exit 4**, nothing changed anywhere |
-| **2. Execute** | Control node + every host | Unreachable hosts, module failures, undefined variables in a task, failed conditionals → per-host failures, **exit 2 or 3** |
+| **2. Execute** | Control node + every host | Unreachable hosts, module failures, undefined variables in a task, failed conditionals → per-host failures, **exit 2 (failed) or 4 (unreachable; docs say 3)** |
 
 Inside phase 2, three pieces of Ansible work together:
 
@@ -131,7 +131,7 @@ $ ansible-playbook -i inventory.ini web.yml --limit web
       └─ f. next play (failed hosts stay excluded for the rest of the run)
 │
 ├─ 8. CALLBACK: print PLAY RECAP from the per-host statistics
-└─ 9. EXIT: 0 all good · 2 some host failed · 3 some host unreachable · 4 parse error · ...
+└─ 9. EXIT: 0 all good · 2 some host failed · 4 some host unreachable (docs: 3) · 4 parse error · ...
 ```
 
 ### Three things people get wrong

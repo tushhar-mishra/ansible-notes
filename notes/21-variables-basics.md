@@ -120,7 +120,7 @@ port: "{{ app_port }}"          # the value is the integer 8080 (just the variab
 url: "http://x:{{ app_port }}"  # a string: "http://x:8080"
 ```
 
-Since ansible-core 2.19, Ansible keeps the **native type** when a value is exactly one `{{ expression }}`. Mixing text with `{{ }}` always gives a string.
+When a value is exactly one `{{ expression }}`, Ansible keeps the result's **native type** (a list stays a list, a number stays a number). Older versions already did this in most cases; ansible-core 2.19's new templating engine made it consistent and stricter (for example, conditionals must now evaluate to real booleans). Mixing text with `{{ }}` always gives a string.
 
 ### Where to define variables (the basics)
 

@@ -49,7 +49,7 @@
 |---|---|---|---|
 | Pull request | `lint` | yamllint + ansible-lint (production profile) | No |
 | Pull request | `molecule` (matrix per role) | Role tests in containers | No (test containers only) |
-| Pull request | `plan-staging` | `--check --diff` against staging; summary on the PR | Read-only (check mode) |
+| Pull request | `plan-staging` | `--check --diff` against staging; summary on the PR | Staging-only credential (check mode is **not** read-only, see below) |
 | Push to `main` | `apply-staging` | Apply to staging + smoke test | Yes (staging) |
 | After staging, **approval** | `apply-prod` | Apply to production + smoke test | Yes (prod) |
 | Schedule (nightly) | `drift` | `--check --diff` on prod; alert if `changed > 0` (topic 55) | Read-only |
@@ -88,7 +88,7 @@ Use **environment** secrets (`staging`, `production`) so the production key is o
 |---|---|
 | `concurrency: { group: ansible-prod, cancel-in-progress: false }` | Two applies to the same environment never run at the same time; a new one waits (don't cancel an apply halfway) |
 | `permissions:` minimal (`contents: read`, `id-token: write` only where OIDC is used) | Least privilege for `GITHUB_TOKEN` |
-| Pin third-party actions by **commit SHA** | Supply-chain safety ([GHA topic 37](../../GitHub-Actions-Basics-To-Production/notes/37-security-hardening.md)) |
+| Pin third-party actions by **commit SHA** | Supply-chain safety ([GHA topic 37](../../GitHub-Actions-Basics-To-Production/notes/37-security-hardening.md)). The examples below use readable `@v5` tags for teaching; in a real repo write `uses: actions/checkout@<40-char SHA> # v5.x.y` and let Dependabot update the SHAs. |
 | No `-vvv` in CI; `no_log` on secret tasks | Logs are kept and widely readable |
 | PRs from forks never get secrets | GitHub's default; don't use `pull_request_target` to work around it |
 | `ANSIBLE_FORCE_COLOR=1` | Coloured logs (optional) |
@@ -395,7 +395,8 @@ Store the content of `/tmp/kh` as the environment variable `KNOWN_HOSTS`. (In th
 **Model answer:**
 1. **Forks** get no secrets; PR workflows use `pull_request` (not `pull_request_target`), so a fork PR can lint but can't access environment secrets or self-hosted runners (restrict self-hosted runners to private repos / specific workflows).
 2. **Production secrets** live only in the `production` environment, which requires reviewer approval and allows deployments only from `main`. A PR branch can't use it.
-3. **Plans** on PRs use a separate `staging-plan` environment with a **read-only/limited** key or a staging-only key; they never touch prod.
+3. **Plans** on PRs use a separate `staging-plan` environment with a **staging-only** key; they never touch prod.
+   - ⚠️ A "read-only" key for Ansible plans is largely an illusion: `--check` still logs in over SSH, usually needs `become` (root), and **really executes** every task marked `check_mode: false` (topic 20). A malicious or careless PR can add such a task. So: give PR plans a credential that can only reach staging, audit every `check_mode: false` task in review (`CODEOWNERS`), and keep prod credentials in an environment that only `main` can use.
 4. **Self-hosted runners**: ephemeral, dedicated to this repo, labels per environment; prod runner only accepts jobs from the protected environment.
 5. **Code review**: CODEOWNERS require infra team review for workflow files and inventories; workflow changes from PRs don't run with prod secrets until merged.
 6. Pinned actions by SHA, minimal `GITHUB_TOKEN` permissions, OIDC roles scoped to repo + branch + environment.

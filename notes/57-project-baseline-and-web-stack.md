@@ -111,6 +111,7 @@ baseline_admins:
     uid: 2001
     key: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../nodes/ansible_key.pub') }}"
     sudo: true
+    password_hash: "{{ vault_alice_password_hash }}"   # sudo asks for a password, so she needs one
   - name: bob
     uid: 2002
     key: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../nodes/ansible_key.pub') }}"
@@ -272,6 +273,7 @@ __baseline_firewall: ufw
     shell: /bin/bash
     groups: "{{ [__baseline_admin_group] if item.sudo | default(false) else omit }}"
     append: true
+    password: "{{ item.password_hash | default(omit) }}"   # a SHA-512 crypt hash, never plaintext
     state: "{{ item.state | default('present') }}"
     remove: "{{ (item.state | default('present')) == 'absent' }}"
   loop: "{{ baseline_admins }}"
@@ -306,6 +308,7 @@ __baseline_firewall: ufw
 ```
 
 - Sudo rules come from data; removing `sudo: true` from a user removes their line.
+- ⚠️ **Corrected:** `ALL=(ALL) ALL` makes sudo ask for the **user's password**. An earlier version created admins with SSH keys only and no password, so they could log in but **never** use sudo. Each sudo admin now gets a vaulted `password_hash` (create one with `mkpasswd -m sha-512` or `openssl passwd -6`, then `ansible-vault encrypt_string` it as `vault_alice_password_hash`). The alternatives are a conscious `NOPASSWD:` (effectively root on key compromise, topic 19), or short-lived SSH certificates plus a PAM module such as `pam_ssh_agent_auth` (topic 60).
 
 `tasks/ssh.yml`:
 

@@ -163,18 +163,56 @@ The lb1 config from topic 29 has lines like:
 
 nginx skips upstream servers marked `down`. We'll toggle that marker, delegated to lb1.
 
+> ⚠️ **Corrected design.** An earlier version edited `/etc/nginx/nginx.conf` with `replace`. But the lb role (topic 29) owns that file through `template`, which breaks the "one owner per file" rule (topics 27, 43): the next run of `lb.yml` silently re-renders the file and **puts a drained host back into rotation**. It also reloaded nginx without testing the config first.
+>
+> Fix: split ownership. The lb role's template only `include`s one small file per backend, and **only `lb_member` writes those files**. (With HAProxy or a cloud LB, use the runtime API instead: `community.general.haproxy`, or target-group deregistration. Then the drain state never lives in a config file at all.)
+
+**One-time change to topic 29's template** (`roles/lb/templates/nginx.conf.j2`): replace the `{% for host in groups[lb_backend_group] %} server … {% endfor %}` loop with:
+
+```jinja
+    upstream backend {
+{% if lb_algorithm == 'least_conn' %}
+        least_conn;
+{% endif %}
+        include /etc/nginx/upstream.d/*.conf;   # one file per backend, owned by lb_member
+    }
+```
+
+and have the lb role create the directory and **seed** a file for any backend that has none yet (`force: false`, so it never overwrites a drain):
+
+```yaml
+- name: Upstream member directory
+  ansible.builtin.file: { path: /etc/nginx/upstream.d, state: directory, mode: "0755" }
+
+- name: Seed a member file for new backends (never overwrite: lb_member owns the state)
+  ansible.builtin.copy:
+    dest: "/etc/nginx/upstream.d/{{ item }}.conf"
+    content: "server {{ hostvars[item]['ansible_host'] }}:{{ hostvars[item]['http_port'] | default(80) }};\n"
+    force: false
+    mode: "0644"
+  loop: "{{ groups[lb_backend_group] }}"
+  notify: Reload nginx
+```
+
 `roles/lb_member/tasks/disable.yml`:
 
 ```yaml
 ---
 - name: Mark this host down in the load balancer upstream
-  ansible.builtin.replace:
-    path: /etc/nginx/nginx.conf
-    regexp: '^(\s*server {{ lb_member_address | regex_escape }}:\d+)(;.*)$'
-    replace: '\1 down\2'
+  ansible.builtin.copy:
+    dest: "/etc/nginx/upstream.d/{{ inventory_hostname }}.conf"
+    content: "server {{ lb_member_address }}:{{ lb_member_port }} down;  # drained by Ansible\n"
+    mode: "0644"
   delegate_to: "{{ lb_member_lb_host }}"
   become: true
   register: __lb_member_disable
+
+- name: Test the nginx config before reloading
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  delegate_to: "{{ lb_member_lb_host }}"
+  become: true
+  when: __lb_member_disable is changed
 
 - name: Reload the load balancer now
   ansible.builtin.systemd_service:
@@ -185,27 +223,7 @@ nginx skips upstream servers marked `down`. We'll toggle that marker, delegated 
   when: __lb_member_disable is changed
 ```
 
-`roles/lb_member/tasks/enable.yml`:
-
-```yaml
----
-- name: Mark this host up in the load balancer upstream
-  ansible.builtin.replace:
-    path: /etc/nginx/nginx.conf
-    regexp: '^(\s*server {{ lb_member_address | regex_escape }}:\d+) down(;.*)$'
-    replace: '\1\2'
-  delegate_to: "{{ lb_member_lb_host }}"
-  become: true
-  register: __lb_member_enable
-
-- name: Reload the load balancer now
-  ansible.builtin.systemd_service:
-    name: nginx
-    state: reloaded
-  delegate_to: "{{ lb_member_lb_host }}"
-  become: true
-  when: __lb_member_enable is changed
-```
+`roles/lb_member/tasks/enable.yml`: the same three tasks, with `content: "server {{ lb_member_address }}:{{ lb_member_port }};\n"` and `register: __lb_member_enable`, and the task name `Mark this host up in the load balancer upstream`.
 
 `roles/lb_member/defaults/main.yml`:
 
@@ -213,11 +231,15 @@ nginx skips upstream servers marked `down`. We'll toggle that marker, delegated 
 ---
 lb_member_lb_host: "{{ groups['lb'][0] }}"
 lb_member_address: "{{ hostvars[inventory_hostname]['ansible_host'] }}"
+lb_member_port: "{{ hostvars[inventory_hostname]['http_port'] | default(80) }}"
 ```
+
+- **Test the fix:** drain web1, run `lb.yml`, then `curl` the LB several times. web1 must stay out of rotation. With the old `replace` design it came back.
 
 - `lb_member_address` uses `hostvars[inventory_hostname]` so it's **web1's** IP even inside a task delegated to lb1.
 - The reload happens immediately (not via a handler), because the next steps depend on the LB already skipping this host.
-- `regex_escape`: the dots in the IP must be literal.
+- The drain state is now a file on lb1 with exactly one writer, so a re-run of any other role can't undo it.
+- If two pipelines can drain at once (two deploys racing), use `throttle: 1` on these tasks, or a lock (topic 49), so the LB never ends up with every backend `down`.
 
 `playbooks/drain-demo.yml`:
 

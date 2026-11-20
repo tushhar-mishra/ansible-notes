@@ -141,13 +141,15 @@ The **status word** after the host name:
 | `0` | Everything succeeded (changed or not) |
 | `1` | Generic error |
 | `2` | One or more hosts **failed** |
-| `3` | One or more hosts **unreachable** |
+| `4` | One or more hosts **unreachable** (in practice; see the warning below) |
 | `4` | Parser error (bad YAML, bad options in a playbook) |
 | `5` | Bad or incomplete command-line options |
 | `99` | You interrupted it (Ctrl+C) |
 | `250` | Unexpected error (a bug or crash) |
 
-Scripts and CI use these: `ansible all -m ping || alert`.
+⚠️ **Corrected:** older docs list `3` for "unreachable", but ansible-core's task queue manager returns `RUN_UNREACHABLE_HOSTS = 4`, so real runs with an unreachable host commonly exit **4**, the same number as a parser error. (A run with both failed and unreachable hosts can also produce other values.) Confirm on your version: stop one lab container, run `ansible all -m ping; echo $?`, and paste the real number here.
+
+Scripts and CI use these: `ansible all -m ping || alert`. **Treat any non-zero as failure**, and if you need to know *why*, parse the PLAY RECAP or use the JSON callback (`ANSIBLE_STDOUT_CALLBACK=json`) instead of branching on 3 vs 4.
 
 ---
 
@@ -337,7 +339,7 @@ db1 | UNREACHABLE! => {
 }
 ```
 ```bash
-echo $?        # 3 = at least one host was unreachable
+echo $?        # usually 4 = at least one host was unreachable (older docs say 3; check yours)
 docker start ansible-lab-db1-1
 ```
 
@@ -423,7 +425,7 @@ docker start ansible-lab-db1-1
 - `ansible PATTERN -m MODULE -a "k=v ..." [-b] [-o] [--check]`. Default module: `command`.
 - Patterns: `group`, `a:b` (or), `a:&b` (and), `a:!b` (not), `web*`, `~regex`, `web[0]`; `--limit` narrows further; `--list-hosts` previews.
 - `command` (no shell) / `shell` (shell features) / `raw` (no Python): all always say `CHANGED`. Prefer real modules.
-- Statuses: **SUCCESS** (green, no change), **CHANGED** (yellow), **FAILED!** (red, module error), **UNREACHABLE!** (red, connection error). Exit codes: 0 ok, 2 failed, 3 unreachable.
+- Statuses: **SUCCESS** (green, no change), **CHANGED** (yellow), **FAILED!** (red, module error), **UNREACHABLE!** (red, connection error). Exit codes: 0 ok, 2 failed, unreachable usually 4 (docs say 3; don't branch on it, treat non-zero as failure).
 - Ad hoc for looking and emergencies; anything repeatable goes into a playbook.
 
 ### Interview questions

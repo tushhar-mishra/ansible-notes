@@ -312,6 +312,10 @@ Line by line, the important parts:
 - `supports_check_mode=True` + `if changed and not module.check_mode`: honest prediction, no changes in `--check`.
 - `diff=...`: Ansible prints it in `--diff` mode.
 - `tempfile` in `module.tmpdir` + `module.atomic_move`: write a temp file, then rename it over the target, so a crash never leaves a half-written config. (`atomic_move` keeps the existing file's permissions and SELinux context.)
+- **Known limitations of this teaching module** (fix them before using it for real):
+  - if a key appears **more than once**, only the last occurrence is updated or removed; a real module should update all of them, or fail with a clear message;
+  - when it **creates** a new file, it sets no `mode`/`owner`/`group`. Add `add_file_common_args=True` to `AnsibleModule(...)` and call `module.set_fs_attributes_if_different(module.load_file_common_arguments(module.params), changed)`, the way `ansible.builtin.lineinfile` does;
+  - there are no tests: add `ansible-test units` for the parser and `ansible-test integration` for check/diff mode.
 - `exit_json(**result)`: the JSON report.
 
 ### The filter: `to_env_lines`
